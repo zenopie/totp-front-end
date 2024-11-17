@@ -1,0 +1,68 @@
+name: Deploy Testnet App to Remote Server
+
+on:
+  push:
+    branches:
+      - main  # Adjust if you use a different branch
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v2
+
+    - name: Deploy and Build Testnet App on Remote Server
+      uses: appleboy/ssh-action@master
+      with:
+        host: ${{ secrets.REMOTE_SERVER_HOST }}
+        username: ${{ secrets.REMOTE_SERVER_USERNAME }}
+        key: ${{ secrets.SSH_PRIVATE_KEY }}
+        script: |
+          # Define the directories
+          HOME_DIR=/home/ubuntu/testnet-earth-network-app
+          WWW_DIR=/var/www/testnet-earth-network-app
+
+          # Create the home directory if it doesn't exist
+          if [ ! -d "$HOME_DIR" ]; then
+            mkdir -p $HOME_DIR
+          fi
+
+          # Navigate to the home directory where the source code is stored
+          cd $HOME_DIR
+
+          # Clone or pull the latest code
+          if [ ! -d ".git" ]; then
+            git clone https://github.com/zenopie/erth-testnet-app.git .
+          else
+            git pull origin main
+          fi
+
+          # Install dependencies
+          if [ -f package.json ]; then
+            npm install
+          else
+            echo "Error: package.json not found!"
+            exit 1
+          fi
+
+          # Build the project
+          npm run build
+
+          # Ensure the web directory exists
+          if [ ! -d "$WWW_DIR" ]; then
+            sudo mkdir -p $WWW_DIR
+          fi
+
+          # Remove old files in the web directory
+          sudo rm -rf $WWW_DIR/*
+
+          # Move the build output to the web directory
+          sudo cp -r build/* $WWW_DIR/
+
+          # Set the correct permissions
+          sudo chown -R www-data:www-data $WWW_DIR
+
+          # Restart Nginx to apply the changes
+          sudo systemctl restart nginx
